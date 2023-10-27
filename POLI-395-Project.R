@@ -10,6 +10,7 @@
 rm(list=ls())  
 
 #setwd
+#change wd to your own
 setwd("~/Desktop/R/POLI 395/POLI 395 Project")
 
 #libraries + packages
