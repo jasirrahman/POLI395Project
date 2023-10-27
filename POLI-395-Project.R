@@ -1,6 +1,6 @@
 ##Poli 395 Project
 ##08/28/23
-#Jasir Rahman
+#JKR
 
 ####################
 
