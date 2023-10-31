@@ -29,7 +29,6 @@ bills <- read.csv('bills_116.csv')  #House and Senate legislative data
 #making names of bills identical across datasets so that we can merge
 bills$bill_number <- gsub("HB", "H.R.", bills$bill_number)
 
-
 #filter out unnecessary columns for lobby data
 lobby_filtered <- lobby[, c(3,5,7,8,9,10,15,16,17,20,22,23,25,26,33)]
 #create lists of strings to isolate firearm related legislation
@@ -54,17 +53,31 @@ gunbills_lobbied <- gunlobby %>%
 
 #create valences for gvleg
 gvleg$valence = rep('restrict', nrow(gvleg))
-#find bills that expand firearm access
 #create list of rows that expand firearm access
-expand.bills = c(3,5,6,18,37,43,45,63,70,72,75,80,85,95,97,98,102)
+expand.leg = c(3,5,6,18,37,43,45,63,70,72,75,80,85,95,97,98,102)
 #create list of rows that are more broad, not necessarily reacting to gun violence
-neutral.bills = c(16,31,38,56,57,59,60,61,73,76,77,78,86,94,118,124,132,140)
+neutral.leg = c(16,31,38,56,57,59,60,61,73,76,77,78,86,94,118,124,132,140)
 #assign rows of expansionary legislation label 'expand'
-gvleg[expand.bills, "valence"] <- 'expand'
+gvleg[expand.leg, "valence"] <- 'expand'
 #assign rows of neutral legislation label 'neutral'
-gvleg[neutral.bills, "valence"] <- 'neutral'
+gvleg[neutral.leg, "valence"] <- 'neutral'
 
-
+#create valences for gunbills
+gunbills$valence = rep('restrict', nrow(gunbills))
+#create list of rows that expand firearm access
+expand.bills = c(3,5,6,16,23,31,33,56,65,67,68,71,84,90,98,123,124,134,135,137,139,140,144,146,150,156,183,185,194,215,226,231,232,237,239,245)
+#create list of rows that are more broad, not necessarily reacting to gun violence
+neutral.bills = c(9,38,153,154,188)
+#create list of rows that are to be dropped because of their irrelevancy
+todrop.bills = c(52,53,60,70,159,175,186,187,191,195,197,220)
+#assign rows of expansionary legislation label 'expand'
+gunbills[expand.bills, "valence"] <- 'expand'
+#assign rows of neutral legislation label 'neutral'
+gunbills[neutral.bills, "valence"] <- 'neutral'
+#drop unnecessary legislation
+gvbills <- gunbills[-todrop.bills,]
+#drop unnecessary columns
+gvbills <- gvbills[,-2]
 
 
 
