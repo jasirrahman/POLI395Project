@@ -24,18 +24,30 @@ library(stargazer)
 lobby <- read.csv('lobbying_data_full_2020.csv')
 leg_116 <- read.csv('house_legislation_116.csv')
 mem_116 <- read.csv('house_members_116.csv')
-roll_info_116 <- read.csv('house_rollcall_info_116.csv')
-roll_vote_116 <- read.csv('house_rollcall_votes_116.csv')
+bills <- read.csv('bills_116.csv')
 
-#filter out unnecessary columns
+#making names of bills identical across datasets so that we can merge
+bills$bill_number <- gsub("HB", "H.R.", bills$bill_number)
+
+
+#filter out unnecessary columns for lobby data
 lobby_filtered <- lobby[, c(3,5,7,8,9,10,15,16,17,20,22,23,25,26,33)]
-target_string_lob = 'Firearms/Guns/Ammunition'
-target_string_leg = 'Firearms'
+filter_string_lob = c('Firearms/Guns/Ammunition','Firearm','firearm','Gun','gun')
+filter_string = c('Firearm','firearm','Gun','gun','ammunition')
+
 gunlobby <- lobby_filtered %>% 
-  filter(str_detect(general_issues, target_string_lob))
+  filter(str_detect(general_issues, paste(filter_string_lob, collapse = "|")))
+gunlobby$bills_lobbied_on <- gsub("H.R. ", "H.R.", gunlobby$bills_lobbied_on)
 
 gvleg <- leg_116 %>% 
-  filter(str_detect(subjects, target_string_leg))
+  filter(str_detect(subjects, paste(filter_string, collapse = "|")))
+
+gunbills <- bills %>% 
+  filter(str_detect(description, paste(filter_string, collapse = "|")))
+
+bill_names = c(bills$bill_number)
+gunbills_lobbied <- gunlobby %>% 
+  filter(str_detect(bills_lobbied_on, paste(bill_names, collapse = "|")))
 
 #create valences for gvleg
 gvleg$valence = rep('restrict', nrow(gvleg))
