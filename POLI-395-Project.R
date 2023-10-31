@@ -22,7 +22,6 @@ library(stargazer)
 
 #Load in data
 lobby <- read.csv('lobbying_data_full_2020.csv')  #lobbying data
-leg_116 <- read.csv('house_legislation_116.csv')  #House legislative data
 mem_116 <- read.csv('house_members_116.csv')  #House member data
 bills <- read.csv('bills_116.csv')  #House and Senate legislative data
 
@@ -38,9 +37,7 @@ filter_string = c('Firearm','firearm','Gun','gun','ammunition')
 gunlobby <- lobby_filtered %>% 
   filter(str_detect(general_issues, paste(filter_string_lob, collapse = "|")))
 gunlobby$bills_lobbied_on <- gsub("H.R. ", "H.R.", gunlobby$bills_lobbied_on)
-#filter House legislative data to only include firearm House legislation
-gvleg <- leg_116 %>% 
-  filter(str_detect(subjects, paste(filter_string, collapse = "|")))
+
 #filter House + Senate data to only include firearm data
 gunbills <- bills %>% 
   filter(str_detect(description, paste(filter_string, collapse = "|")))
@@ -50,17 +47,6 @@ bill_names = c(bills$bill_number)
 #isolate gun lobbying data that targets legislation
 gunbills_lobbied <- gunlobby %>% 
   filter(str_detect(bills_lobbied_on, paste(bill_names, collapse = "|")))
-
-#create valences for gvleg
-gvleg$valence = rep('restrict', nrow(gvleg))
-#create list of rows that expand firearm access
-expand.leg = c(3,5,6,18,37,43,45,63,70,72,75,80,85,95,97,98,102)
-#create list of rows that are more broad, not necessarily reacting to gun violence
-neutral.leg = c(16,31,38,56,57,59,60,61,73,76,77,78,86,94,118,124,132,140)
-#assign rows of expansionary legislation label 'expand'
-gvleg[expand.leg, "valence"] <- 'expand'
-#assign rows of neutral legislation label 'neutral'
-gvleg[neutral.leg, "valence"] <- 'neutral'
 
 #create valences for gunbills
 gunbills$valence = rep('restrict', nrow(gunbills))
@@ -78,7 +64,6 @@ gunbills[neutral.bills, "valence"] <- 'neutral'
 gvbills <- gunbills[-todrop.bills,]
 #drop unnecessary columns
 gvbills <- gvbills[,-2]
-
 
 
 
