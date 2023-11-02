@@ -1,5 +1,5 @@
-##Poli 395 Project
-##08/28/23
+##Poli 395 Project v1 (both House and Senate data)
+##11/02/23
 #Jasir Rahman
 
 ####################
