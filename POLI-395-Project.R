@@ -65,6 +65,25 @@ gvbills <- gunbills[-todrop.bills,]
 #drop unnecessary columns
 gvbills <- gvbills[,-2]
 
+##assigning pro/anti lobbying valences
+#assign general gun restriction valence to all lobbyists for ease of computation
+gunlobby$valence = rep('restrict', nrow(gunlobby))
 
+##check orgs manually to see general stances towards firearms
 
+#create filter list for pro-gun orgs
+pro_org_filter = c('Smith And Wesson Brands Inc.', 'Sig Sauer Inc', 'Shotspotter Inc.','Polymer80, Inc.','Palmetto State Armory, Llc', 
+'Olin Corporation', 'Nst Global, Llc', 'National Shooting Sports Foundation', 'National Rifle Association Of America', 
+'National Rifle Association, Institute For Legislative Action', 'Nst Global, Llc (Dba Sb Tactical)',
+'National Association For Gun Rights', 'Nammo Perry, Inc', 'Mars, Inc.', 'Kongsberg Defence & Aerospace', 'Kelley Drye & Warren Llp',
+'Hill Country Class 3, Llc', 'Gun Owners Of America Inc', 'Firearms Regulatory Accountability Coalition, Inc. - Frac', 
+'Firearms Regulatory Accountability Coalition, Inc. (Frac)', 'Firearms Policy Coalition, Inc.', 'Defense Distributed', 
+'Dallas Safari Club', 'Corporation For The Promotion Of Rifle Practice & Firearm Safety', 
+'Citizens Committee For The Right To Keep And Bear Arms', 'American Outdoor Brands Corporation', 'Magpul Industries Corp.')
+#create filter list for neutral/mixed orgs
+neutral_org_filter = c("National Fraternal Order Of Police", "Dick'S Sporting Goods (On Behalf Of Finsbury Llc)")
 
+#assign rows of pro-gun orgs label 'expand'
+gunlobby$valence <- ifelse(gunlobby$client_name %in% pro_org_filter, 'expand', gunlobby$valence)
+#assign rows of neutral orgs label 'neutral'
+gunlobby$valence <- ifelse(gunlobby$client_name %in% neutral_org_filter, 'neutral', gunlobby$valence)
