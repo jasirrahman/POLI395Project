@@ -34,8 +34,19 @@ gunlobby$bills_lobbied_on <- gsub("H.R. ", "H.R.", gunlobby$bills_lobbied_on)
 bills <- leg_116 %>% 
   filter(str_detect(subjects, paste(filter_string, collapse = "|")))
 
+#rename variable name to sponsor in mems_116
+mems_116 <- mems_116 %>%
+  rename(sponsor = name_id)
+
 #create list of strings from all bill names 
 bill_names = c(bills$bill_id)
+
+#merge data based on column sponsor for both bills
+sponsor <- bills %>%
+  full_join(mems_116, by = c("sponsor" = "sponsor"))
+
+#filter data by keeping inclusive to cells in bill_id with data
+sponsor <- sponsor[complete.cases(sponsor$bill_id),]
 
 #isolate gun lobbying data that targets legislation
 gunlobby <- gunlobby %>% 
