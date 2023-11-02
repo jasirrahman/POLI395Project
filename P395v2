@@ -42,17 +42,7 @@ bill_names = c(bills$bill_number)
 #isolate gun lobbying data that targets legislation
 gunbills_lobbied <- gunlobby %>% 
   filter(str_detect(bills_lobbied_on, paste(bill_names, collapse = "|")))
-
-
-    
-        
-          
-    
-
-        
-        Expand All
-    
-    @@ -67,5 +70,3 @@ gvleg[neutral.bills, "valence"] <- 'neutral'
+gvleg[neutral.bills, "valence"] <- 'neutral'
   
 #create valences for gvleg
 gvleg$valence = rep('restrict', nrow(gvleg))
