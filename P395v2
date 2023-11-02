@@ -19,11 +19,9 @@ library(stargazer)
 lobby <- read.csv('lobbying_data_full_2020.csv')  #lobbying data
 leg_116 <- read.csv('house_legislation_116.csv')  #House legislative data
 mem_116 <- read.csv('house_members_116.csv')  #House member data
-bills <- read.csv('bills_116.csv')  #House and Senate legislative data
 
 #making names of bills identical across datasets so that we can merge
 bills$bill_number <- gsub("HB", "H.R.", bills$bill_number)
-
 
 #filter out unnecessary columns for lobby data
 lobby_filtered <- lobby[, c(3,5,7,8,9,10,15,16,17,20,22,23,25,26,33)]
@@ -37,9 +35,7 @@ gunlobby$bills_lobbied_on <- gsub("H.R. ", "H.R.", gunlobby$bills_lobbied_on)
 #filter House legislative data to only include firearm House legislation
 gvleg <- leg_116 %>% 
   filter(str_detect(subjects, paste(filter_string, collapse = "|")))
-#filter House + Senate data to only include firearm data
-gunbills <- bills %>% 
-  filter(str_detect(description, paste(filter_string, collapse = "|")))
+
 #create list of strings from all bill names 
 bill_names = c(bills$bill_number)
 
