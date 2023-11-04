@@ -99,3 +99,13 @@ data <- inner_join(data, bills, by = "bill_name")
 #filter out data for bills without gvp focus
 data <- data %>% 
   filter(str_detect(description, paste(filter_string_lob, collapse = "|")))
+
+#check on summary statistics for ind. or dep. variables
+summary(data$dollar_amount)
+summary(data$status)
+
+#check and print percent missing for ind. and dep. variables
+missing_percent_dollar_amount <- sum(is.na(data$dollar_amount)) / length(data$dollar_amount) * 100
+missing_percent_status <- sum(is.na(data$status)) / length(data$status) * 100
+cat("Percentage of missing values in 'dollar_amount':", missing_percent_dollar_amount, "%\n")
+cat("Percentage of missing values in 'status':", missing_percent_status, "%\n")
