@@ -1,0 +1,86 @@
+---
+title: "P395AnalysisDraft"
+author: "Jasir Rahman"
+date: "`r Sys.Date()`"
+output:
+  word_document: default
+  html_document: default
+---
+
+Setup:
+```{r}
+##11/07/23
+#General Data on Lobbying
+rm(list=ls())  
+#setwd
+setwd("~/Desktop/R/POLI 395/POLI 395 Project")
+#libraries + packages
+library(devtools)
+library(foreign)
+library(qss)
+library(ggplot2)
+library(dplyr)
+library(stargazer)
+library(stringr)
+library(tidyverse)
+
+#Load in data
+og <- read.csv('original_data.csv')
+blob <- read.csv('bills_lobbied_on.csv')  
+lobby <- read.csv('lobbying_data_full_2020.csv')  #lobbying data
+leg_116 <- read.csv('house_legislation_116.csv')  #House legislative data
+mem_116 <- read.csv('house_members_116.csv')  #House member data
+bills <- read.csv('bills_116.csv')  #House and Senate legislative data
+
+```
+
+Data cleaning:
+```{r}
+#join on id.poli395
+blog <- blob %>% 
+  full_join(og, by = c('id.poli395' = 'id.poli395'))
+#restrict to the 116th congress
+blog <- blog %>% 
+  filter(congress == 116)
+
+#subset data to include only necessary columns
+blog = blog[, c(1:5,8,10,17,18,20,27,28,30,31,38)]
+#rename H.R. in data
+blog$bill_name <- gsub("H.R. ", "H.R.", blog$bill_name)
+
+##merging bill statuses on bill names'
+bills = bills[, c(3,4,5,7,8,9,10,12)]
+bills$bill_number <- gsub("HB", "H.R.", bills$bill_number)
+bills <- bills %>% 
+  rename(bill_name = bill_number)
+
+#rename variable name to sponsor in mems_116
+mem_116 <- mem_116 %>%
+  rename(sponsor = name_id)
+
+#create list of strings from all bill names 
+leg_116 = leg_116[, c(1,3,4)]
+
+#merge data based on column sponsor for both bills
+sponsor <- leg_116 %>%
+  full_join(mem_116, by = c("sponsor" = "sponsor"))
+
+#filter data by keeping inclusive to cells in bill_id with data
+sponsor <- sponsor[complete.cases(sponsor$bill_id),]
+sponsor <- sponsor %>% 
+  rename(bill_name= bill_id)
+```
+
+Checking summary statistics:
+```{r}
+#check on summary statistics for ind. or dep. variables
+summary(data$dollar_amount)
+summary(data$status)
+#check and print percent missing for ind. and dep. variables
+missing_percent_dollar_amount <- sum(is.na(data$dollar_amount)) / length(data$dollar_amount) * 100
+missing_percent_status <- sum(is.na(data$status)) / length(data$status) * 100
+cat("Percentage of missing values in 'dollar_amount':", missing_percent_dollar_amount, "%\n")
+cat("Percentage of missing values in 'status':", missing_percent_status, "%\n")
+```
+
+
