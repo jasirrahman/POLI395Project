@@ -82,13 +82,22 @@ missing_percent_status <- sum(is.na(data$status)) / length(data$status) * 100
 cat("Percentage of missing values in 'dollar_amount':", missing_percent_dollar_amount, "%\n")
 cat("Percentage of missing values in 'status':", missing_percent_status, "%\n")
 ```
-Creating binary sets of vars for outcome measure
+
+Running Analysis: 
+
 ```{r}
 ##Create 2 binary sets of vars
 #1st is for distinguishing between 1s and 2+4
 data <- data%>% 
-  mutate(committee = ifelse(status <= 1, 1, 0))
+  mutate(committee = ifelse(status > 1, 1, 0))  #1 if out of committee 0 if not out
 #2nd is for distinguishing between 1+2 and 4s
 data <- data%>% 
-  mutate(passed = ifelse(status > 2, 1, 0))
+  mutate(passed = ifelse(status > 2, 1, 0))  #1 if passed 0 if didn't pass
+#Model
+model1 <- lm(committee ~ dollar_amount + sponsor + current_party + state + registrant_name, data = data)
+summary(model1)
+model2 <- lm(passed ~ dollar_amount + sponsor + current_party + state + registrant_name, data = data)
+summary(model2)
 ```
+
+
