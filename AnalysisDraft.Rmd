@@ -78,6 +78,15 @@ blog$prevpos <- ifelse(grepl(target_string, blog$lobbyist_more_info, fixed = T),
 
 ```
 
+merge data
+```{r}
+#merge data
+data <- inner_join(blog, sponsor, by = "bill_name")
+data <- inner_join(data, bills, by = "bill_name")
+#filter out data for bills without gvp focus
+```
+
+
 Scraping lobby firm data
 ```{r}
 text <- "Lobbying Firm   2021 Revenue
@@ -473,12 +482,12 @@ data <- data %>%
 ```
 
 
-merge data
+
+Checking committee names:
 ```{r}
-#merge data
-data <- inner_join(blog, sponsor, by = "bill_name")
-data <- inner_join(data, bills, by = "bill_name")
-#filter out data for bills without gvp focus
+data %>%
+  group_by(committee_id) %>% 
+  
 ```
 
 
@@ -533,4 +542,111 @@ pmodel3 <- lm(passed ~ dollar_amount + registrant_id, data = data)
 #summary(pmodel2)
 ```
 
+New Subset for Bill-Centric Analysis and Data Visualization:
+
+```{r}
+#filteres out data that has no lobby dollar amount
+dataviz <- data
+dataviz <- dataviz[!is.na(dataviz$dollar_amount), ]
+#calculates sum of total amount spent to lobby on bill by each organization
+#note: this sum does not represent the true value of each dollar because 
+#organizations file the amount they spend on lobbying and group together
+#all the pieces of legislation that they will discuss with legislators
+#so in essence the orgs that spend money group all their issues together and
+#the value of each dollar towards each issue is weighted equally
+dataviz <- dataviz %>% 
+  group_by(bill_name) %>% 
+  mutate(totalspent = sum(dollar_amount))
+#creates vector that has the number of groups that lobbied on a bill
+dataviz <- dataviz %>%
+  group_by(bill_name) %>%
+  mutate(numlobbygroups = n_distinct(registrant_id))
+#creates vector that has the number of lobby filings for each bill
+dataviz <- dataviz %>%
+  group_by(bill_name) %>%
+  mutate(numfilings = n())
+
+#pulls data together for bill-centric data visualization and analysis
+dataviz <- dataviz[, c("bill_name", "status", "current_party", "state", "sponsor", "numlobbygroups", "numfilings", "committee_id", "committee", "passed", "totalspent")]
+
+dataviz <- dataviz[!is.na(dataviz$totalspent), ]
+dataviz <- dataviz[!duplicated(dataviz$bill_name), ]
+
+summary(dataviz)
+
+
+```
+
+
+
+Bill-Centric Analysis:
+```{r}
+##Models for Committee Outcome
+#Model w/ no controls
+cm <- lm(committee ~ totalspent, data = dataviz)
+summary(cm)
+#Model w/ party + state controls
+cm1 <- lm(committee ~ totalspent + current_party + state + numlobbygroups + numfilings + factor(committee_id), data = dataviz)
+summary(cm1)
+#Model w/ sponsor controls but neither state nor party
+cm2 <- lm(committee ~ totalspent + sponsor, data = dataviz)
+summary(cm2)
+
+##Models for Passage Outcome
+#Model w/ no controls
+pm <- lm(passed ~ totalspent, data = dataviz)
+summary(pm)
+#Model w/ party + state controls
+pm1 <- lm(committee ~ totalspent + current_party + state + numlobbygroups + numfilings, data = dataviz)
+summary(pm1)
+#Model w/ sponsor controls but neither state nor party
+pm2 <- lm(passed ~ totalspent + sponsor, data = dataviz)
+summary(pm2)
+```
+
+Output Table:
+```{r}
+#Latex Table
+#reason we are using 'cm2' and 'pm2' for the table is that it controls for the sponsors
+#controlling for sponsors can be a proxy for a few things:
+#sponsor themselves, party, state, seniority, committee membership
+wordreg(list(cm2, pm2), file = 'results.docx', digits = 2,
+        include.rsquared = FALSE, include.adjrs = FALSE)
+```
+
+Density Plot for Passed Legislation:
+```{r}
+ggplot(dataviz, aes(log(totalspent), fill = factor(passed))) +
+  geom_density(alpha = 0.5) +
+  labs(
+    title = "Density Plot of Lobby Dollars for Bills",
+    x = "Lobby Dollars (Log Transformed)",
+    y = "Density",
+    fill = "Passed Out \n of House?") +
+  scale_fill_discrete(labels = c("Did Not Pass", "Passed"))
+```
+
+Density Plot for Effect of Lobby Dollars on Committee Legislation:
+```{r}
+ggplot(dataviz, aes(log(totalspent), fill = factor(committee))) +
+  geom_density(alpha = 0.5) +
+  labs(
+    title = "Density Plot of Lobby Dollars for Bills by Status",
+    x = "Lobby Dollars (Log Transformed)",
+    y = "Density",
+    fill = "Passed Out \n of Committee?") +
+  scale_fill_discrete(labels = c("Did Not Pass", "Passed"))
+```
+
+Density Plot for Effect of Lobby Dollars on Status:
+```{r}
+ggplot(dataviz, aes(log(totalspent), fill = factor(status))) +
+  geom_density(alpha = 0.5) +
+  labs(
+    title = "Density Plot of Lobby Dollars for Bills by Status",
+    x = "Lobby Dollars (Log Transformed)",
+    y = "Density",
+    fill = "Bill End Status") +
+  scale_fill_discrete(labels = c("In Committee", "Out Committee", "Passed"))
+```
 
