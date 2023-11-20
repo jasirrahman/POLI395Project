@@ -78,194 +78,6 @@ blog$prevpos <- ifelse(grepl(target_string, blog$lobbyist_more_info, fixed = T),
 
 ```
 
-merge data
-```{r}
-#merge data
-data <- inner_join(blog, sponsor, by = "bill_name")
-data <- inner_join(data, bills, by = "bill_name")
-#filter out data for bills without gvp focus
-```
-
-
-Checking summary statistics:
-```{r}
-#check on summary statistics for ind. or dep. variables
-summary(data$dollar_amount)
-summary(data$status)
-#check and print percent missing for ind. and dep. variables
-missing_percent_dollar_amount <- sum(is.na(data$dollar_amount)) / length(data$dollar_amount) * 100
-missing_percent_status <- sum(is.na(data$status)) / length(data$status) * 100
-cat("Percentage of missing values in 'dollar_amount':", missing_percent_dollar_amount, "%\n")
-cat("Percentage of missing values in 'status':", missing_percent_status, "%\n")
-```
-
-Running Lobby-Centric Analysis:
-
-```{r}
-##Create 2 binary sets of vars
-#1st is for distinguishing between 1s and 2+4
-data <- data%>% 
-  mutate(committee = ifelse(status > 1, 1, 0))  #1 for out of committee 0 for not
-#2nd is for distinguishing between 1+2 and 4s
-data <- data%>% 
-  mutate(passed = ifelse(status > 2, 1, 0))  #1 for passed 0 for not
-##Models for Committee Outcome
-#Model w/ no controls
-cmodel <- lm(committee ~ dollar_amount, data = data)
-summary(cmodel)
-#Model w/ party + state controls
-cmodel1 <- lm(committee ~ dollar_amount + current_party + state + largefirm + topfirm, data = data)
-summary(cmodel1)
-#Model w/ sponsor controls but neither state nor party
-cmodel2 <- lm(committee ~ dollar_amount + sponsor, data = data)
-summary(cmodel2)
-#Model w/ registrant controls
-cmodel3 <- lm(committee ~ dollar_amount + registrant_id, data = data)
-#summary(cmodel3)
-
-##Models for Passage Outcome
-#Model w/ no controls
-pmodel <- lm(passed ~ dollar_amount, data = data)
-summary(pmodel)
-#Model w/ party + state controls
-pmodel1 <- lm(passed ~ dollar_amount + current_party + state + largefirm + prevpos + topfirm, data = data)
-summary(pmodel1)
-#Model w/ sponsor controls but neither state nor party
-pmodel2 <- lm(passed ~ dollar_amount + sponsor, data = data)
-#summary(pmodel2)
-#Model w/ registrant controls
-pmodel3 <- lm(passed ~ dollar_amount + registrant_id, data = data)
-#summary(pmodel2)
-```
-
-New Subset for Bill-Centric Analysis and Data Visualization:
-
-```{r}
-#filteres out data that has no lobby dollar amount
-dataviz <- data
-dataviz <- dataviz[!is.na(dataviz$dollar_amount), ]
-#calculates sum of total amount spent to lobby on bill by each organization
-#note: this sum does not represent the true value of each dollar because 
-#organizations file the amount they spend on lobbying and group together
-#all the pieces of legislation that they will discuss with legislators
-#so in essence the orgs that spend money group all their issues together and
-#the value of each dollar towards each issue is weighted equally
-dataviz <- dataviz %>% 
-  group_by(bill_name) %>% 
-  mutate(totalspent = sum(dollar_amount))
-#creates vector that has the number of groups that lobbied on a bill
-dataviz <- dataviz %>%
-  group_by(bill_name) %>%
-  mutate(numlobbygroups = n_distinct(registrant_id))
-#creates vector that has the number of lobby filings for each bill
-dataviz <- dataviz %>%
-  group_by(bill_name) %>%
-  mutate(numfilings = n())
-
-#pulls data together for bill-centric data visualization and analysis
-dataviz <- dataviz[, c("bill_name", "status", "current_party", "state", "sponsor", "numlobbygroups", "numfilings", "committee", "passed", "totalspent")]
-
-dataviz <- dataviz[!is.na(dataviz$totalspent), ]
-dataviz <- dataviz[!duplicated(dataviz$bill_name), ]
-
-summary(dataviz)
-
-
-```
-
-
-
-Bill-Centric Analysis:
-```{r}
-##Models for Committee Outcome
-#Model w/ no controls
-cm <- lm(committee ~ totalspent, data = dataviz)
-summary(cm)
-#Model w/ party + state controls
-cm1 <- lm(committee ~ totalspent + current_party + state + numlobbygroups + numfilings, data = dataviz)
-summary(cm1)
-#Model w/ sponsor controls but neither state nor party
-cm2 <- lm(committee ~ totalspent + sponsor, data = dataviz)
-summary(cm2)
-
-##Models for Passage Outcome
-#Model w/ no controls
-pm <- lm(passed ~ totalspent, data = dataviz)
-summary(pm)
-#Model w/ party + state controls
-pm1 <- lm(committee ~ totalspent + current_party + state + numlobbygroups + numfilings, data = dataviz)
-summary(pm1)
-#Model w/ sponsor controls but neither state nor party
-pm2 <- lm(passed ~ totalspent + sponsor, data = dataviz)
-summary(pm2)
-```
-
-Output Table:
-```{r}
-#Latex Table
-#reason we are using 'cm2' and 'pm2' for the table is that it controls for the sponsors
-#controlling for sponsors can be a proxy for a few things:
-#sponsor themselves, party, state, seniority, committee membership
-wordreg(list(cm2, pm2), file = 'results.docx', digits = 2,
-        include.rsquared = FALSE, include.adjrs = FALSE)
-```
-
-Density Plot for Passed Legislation:
-```{r}
-ggplot(dataviz, aes(log(totalspent), fill = factor(passed))) +
-  geom_density(alpha = 0.5) +
-  labs(
-    title = "Density Plot of Lobby Dollars for Bills",
-    x = "Lobby Dollars (Log Transformed)",
-    y = "Density",
-    fill = "Passed Out \n of House?") +
-  scale_fill_discrete(labels = c("Did Not Pass", "Passed"))
-```
-
-Density Plot for Effect of Lobby Dollars on Committee Legislation:
-```{r}
-ggplot(dataviz, aes(log(totalspent), fill = factor(committee))) +
-  geom_density(alpha = 0.5) +
-  labs(
-    title = "Density Plot of Lobby Dollars for Bills by Status",
-    x = "Lobby Dollars (Log Transformed)",
-    y = "Density",
-    fill = "Passed Out \n of Committee?") +
-  scale_fill_discrete(labels = c("Did Not Pass", "Passed"))
-```
-
-Density Plot for Effect of Lobby Dollars on Status:
-```{r}
-ggplot(dataviz, aes(log(totalspent), fill = factor(status))) +
-  geom_density(alpha = 0.5) +
-  labs(
-    title = "Density Plot of Lobby Dollars for Bills by Status",
-    x = "Lobby Dollars (Log Transformed)",
-    y = "Density",
-    fill = "Bill End Status") +
-  scale_fill_discrete(labels = c("In Committee", "Out Committee", "Passed"))
-```
-
-Creating unique dummies for each lobby group:
-```{r}
-dummy_matrix <- fastDummies::dummy_cols(data, select_columns = "registrant_id")
-tib <- data %>% 
-  group_by(registrant_id) %>% 
-  summarize(count = n()) %>% 
-  mutate(largefirm = case_when(count > 10 ~ 1,
-                              count <= 10 ~ 0))
-
-data <- data %>% 
-  full_join(tib, by = c('registrant_id' = 'registrant_id'))
-```
-
-```{r}
-#check means of bills that passed for each status
-dataviz %>% 
-  group_by(status) %>% 
-  summarize(meanstat = mean(totalspent))
-```
-
 Scraping lobby firm data
 ```{r}
 text <- "Lobbying Firm   2021 Revenue
@@ -644,6 +456,81 @@ data$topfirm <- 0
 # Find the indices where the lobbying firm matches the registrant_name and update 'topfirm' to 1
 matching_indices <- match(tolower(df$Lobbying_Firm), tolower(data$registrant_name), nomatch = 0)
 data$topfirm[matching_indices] <- 1
+```
+
+Creating large firm variable (somewhat obsolete because of the code above that creates the list of firms that are a part of the top 350)
+```{r}
+#ignore the dummies
+#dummy_matrix <- fastDummies::dummy_cols(data, select_columns = "registrant_id")
+tib <- data %>% 
+  group_by(registrant_id) %>% 
+  summarize(count = n()) %>% 
+  mutate(largefirm = case_when(count > 10 ~ 1,
+                              count <= 10 ~ 0))
+
+data <- data %>% 
+  full_join(tib, by = c('registrant_id' = 'registrant_id'))
+```
+
+
+merge data
+```{r}
+#merge data
+data <- inner_join(blog, sponsor, by = "bill_name")
+data <- inner_join(data, bills, by = "bill_name")
+#filter out data for bills without gvp focus
+```
+
+
+Checking summary statistics:
+```{r}
+#check on summary statistics for ind. or dep. variables
+summary(data$dollar_amount)
+summary(data$status)
+#check and print percent missing for ind. and dep. variables
+missing_percent_dollar_amount <- sum(is.na(data$dollar_amount)) / length(data$dollar_amount) * 100
+missing_percent_status <- sum(is.na(data$status)) / length(data$status) * 100
+cat("Percentage of missing values in 'dollar_amount':", missing_percent_dollar_amount, "%\n")
+cat("Percentage of missing values in 'status':", missing_percent_status, "%\n")
+```
+
+Running Lobby-Centric Analysis:
+
+```{r}
+##Create 2 binary sets of vars
+#1st is for distinguishing between 1s and 2+4
+data <- data%>% 
+  mutate(committee = ifelse(status > 1, 1, 0))  #1 for out of committee 0 for not
+#2nd is for distinguishing between 1+2 and 4s
+data <- data%>% 
+  mutate(passed = ifelse(status > 2, 1, 0))  #1 for passed 0 for not
+##Models for Committee Outcome
+#Model w/ no controls
+cmodel <- lm(committee ~ dollar_amount, data = data)
+summary(cmodel)
+#Model w/ party + state controls
+cmodel1 <- lm(committee ~ dollar_amount + current_party + state + largefirm + topfirm + factor(committee_id), data = data)
+summary(cmodel1)
+#Model w/ sponsor controls but neither state nor party
+cmodel2 <- lm(committee ~ dollar_amount + sponsor, data = data)
+summary(cmodel2)
+#Model w/ registrant controls
+cmodel3 <- lm(committee ~ dollar_amount + registrant_id, data = data)
+#summary(cmodel3)
+
+##Models for Passage Outcome
+#Model w/ no controls
+pmodel <- lm(passed ~ dollar_amount, data = data)
+summary(pmodel)
+#Model w/ party + state controls
+pmodel1 <- lm(passed ~ dollar_amount + current_party + state + largefirm + prevpos + topfirm + factor(committee_id), data = data)
+summary(pmodel1)
+#Model w/ sponsor controls but neither state nor party
+pmodel2 <- lm(passed ~ dollar_amount + sponsor, data = data)
+#summary(pmodel2)
+#Model w/ registrant controls
+pmodel3 <- lm(passed ~ dollar_amount + registrant_id, data = data)
+#summary(pmodel2)
 ```
 
 
