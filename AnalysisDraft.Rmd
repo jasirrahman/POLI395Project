@@ -46,7 +46,7 @@ blog <- blog %>%
   filter(congress == 116)
 
 #subset data to include only necessary columns
-blog = blog[, c(1:5,8,10,17,18,20,27,28,30,31,38)]
+blog = blog[, c(1:5,8,10,17,18,20,22,27,28,30,31,38)]
 #rename H.R. in data
 blog$bill_name <- gsub("H.R. ", "H.R.", blog$bill_name)
 
@@ -71,6 +71,11 @@ sponsor <- leg_116 %>%
 sponsor <- sponsor[complete.cases(sponsor$bill_id),]
 sponsor <- sponsor %>% 
   rename(bill_name= bill_id)
+
+#create "prevpos" variable, binary indicator for whether or not a lobbyist had a previous position
+target_string = "', 'previous_positions': ''}" 
+blog$prevpos <- ifelse(grepl(target_string, blog$lobbyist_more_info, fixed = T), 0, 1)
+
 ```
 
 merge data
@@ -109,8 +114,8 @@ data <- data%>%
 cmodel <- lm(committee ~ dollar_amount, data = data)
 summary(cmodel)
 #Model w/ party + state controls
-cmodel1 <- lm(committee ~ dollar_amount + current_party + state, data = data)
-#summary(cmodel1)
+cmodel1 <- lm(committee ~ dollar_amount + current_party + state + largefirm + topfirm, data = data)
+summary(cmodel1)
 #Model w/ sponsor controls but neither state nor party
 cmodel2 <- lm(committee ~ dollar_amount + sponsor, data = data)
 summary(cmodel2)
@@ -123,8 +128,8 @@ cmodel3 <- lm(committee ~ dollar_amount + registrant_id, data = data)
 pmodel <- lm(passed ~ dollar_amount, data = data)
 summary(pmodel)
 #Model w/ party + state controls
-pmodel1 <- lm(committee ~ dollar_amount + current_party + state, data = data)
-#summary(pmodel1)
+pmodel1 <- lm(passed ~ dollar_amount + current_party + state + largefirm + prevpos + topfirm, data = data)
+summary(pmodel1)
 #Model w/ sponsor controls but neither state nor party
 pmodel2 <- lm(passed ~ dollar_amount + sponsor, data = data)
 #summary(pmodel2)
@@ -136,18 +141,39 @@ pmodel3 <- lm(passed ~ dollar_amount + registrant_id, data = data)
 New Subset for Bill-Centric Analysis and Data Visualization:
 
 ```{r}
+#filteres out data that has no lobby dollar amount
 dataviz <- data
 dataviz <- dataviz[!is.na(dataviz$dollar_amount), ]
-dataviz <- dataviz[!duplicated(dataviz$bill_name), ]
-
-dataviz <- data %>% 
+#calculates sum of total amount spent to lobby on bill by each organization
+#note: this sum does not represent the true value of each dollar because 
+#organizations file the amount they spend on lobbying and group together
+#all the pieces of legislation that they will discuss with legislators
+#so in essence the orgs that spend money group all their issues together and
+#the value of each dollar towards each issue is weighted equally
+dataviz <- dataviz %>% 
   group_by(bill_name) %>% 
   mutate(totalspent = sum(dollar_amount))
+#creates vector that has the number of groups that lobbied on a bill
+dataviz <- dataviz %>%
+  group_by(bill_name) %>%
+  mutate(numlobbygroups = n_distinct(registrant_id))
+#creates vector that has the number of lobby filings for each bill
+dataviz <- dataviz %>%
+  group_by(bill_name) %>%
+  mutate(numfilings = n())
 
-dataviz <- dataviz[, c("bill_name", "status", "current_party", "state", "sponsor", "committee", "passed", "totalspent")]
+#pulls data together for bill-centric data visualization and analysis
+dataviz <- dataviz[, c("bill_name", "status", "current_party", "state", "sponsor", "numlobbygroups", "numfilings", "committee", "passed", "totalspent")]
+
 dataviz <- dataviz[!is.na(dataviz$totalspent), ]
 dataviz <- dataviz[!duplicated(dataviz$bill_name), ]
+
+summary(dataviz)
+
+
 ```
+
+
 
 Bill-Centric Analysis:
 ```{r}
@@ -156,18 +182,18 @@ Bill-Centric Analysis:
 cm <- lm(committee ~ totalspent, data = dataviz)
 summary(cm)
 #Model w/ party + state controls
-cm1 <- lm(committee ~ totalspent + current_party + state, data = dataviz)
-#summary(cm1)
+cm1 <- lm(committee ~ totalspent + current_party + state + numlobbygroups + numfilings, data = dataviz)
+summary(cm1)
 #Model w/ sponsor controls but neither state nor party
 cm2 <- lm(committee ~ totalspent + sponsor, data = dataviz)
-#summary(cm2)
+summary(cm2)
 
 ##Models for Passage Outcome
 #Model w/ no controls
 pm <- lm(passed ~ totalspent, data = dataviz)
 summary(pm)
 #Model w/ party + state controls
-pm1 <- lm(committee ~ totalspent + current_party + state, data = dataviz)
+pm1 <- lm(committee ~ totalspent + current_party + state + numlobbygroups + numfilings, data = dataviz)
 summary(pm1)
 #Model w/ sponsor controls but neither state nor party
 pm2 <- lm(passed ~ totalspent + sponsor, data = dataviz)
@@ -196,7 +222,7 @@ ggplot(dataviz, aes(log(totalspent), fill = factor(passed))) +
   scale_fill_discrete(labels = c("Did Not Pass", "Passed"))
 ```
 
-Density Plot for Committee Legislation:
+Density Plot for Effect of Lobby Dollars on Committee Legislation:
 ```{r}
 ggplot(dataviz, aes(log(totalspent), fill = factor(committee))) +
   geom_density(alpha = 0.5) +
@@ -208,7 +234,7 @@ ggplot(dataviz, aes(log(totalspent), fill = factor(committee))) +
   scale_fill_discrete(labels = c("Did Not Pass", "Passed"))
 ```
 
-Density Plot for Levels:
+Density Plot for Effect of Lobby Dollars on Status:
 ```{r}
 ggplot(dataviz, aes(log(totalspent), fill = factor(status))) +
   geom_density(alpha = 0.5) +
@@ -219,4 +245,405 @@ ggplot(dataviz, aes(log(totalspent), fill = factor(status))) +
     fill = "Bill End Status") +
   scale_fill_discrete(labels = c("In Committee", "Out Committee", "Passed"))
 ```
+
+Creating unique dummies for each lobby group:
+```{r}
+dummy_matrix <- fastDummies::dummy_cols(data, select_columns = "registrant_id")
+tib <- data %>% 
+  group_by(registrant_id) %>% 
+  summarize(count = n()) %>% 
+  mutate(largefirm = case_when(count > 10 ~ 1,
+                              count <= 10 ~ 0))
+
+data <- data %>% 
+  full_join(tib, by = c('registrant_id' = 'registrant_id'))
+```
+
+```{r}
+#check means of bills that passed for each status
+dataviz %>% 
+  group_by(status) %>% 
+  summarize(meanstat = mean(totalspent))
+```
+
+Scraping lobby firm data
+```{r}
+text <- "Lobbying Firm   2021 Revenue
+Brownstein Hyatt Farber Schreck LLP $56.6M
+Akin Gump Strauss Hauer & Feld LLP $53.6M
+Holland & Knight LLP $35.1M
+BGR Government Affairs LLC $35.0M
+Cornerstone Government Affairs Inc. $34.6M
+Invariant LLC $31.2M
+Forbes Tate LLC $24.6M
+Tiber Creek Group Inc. $24.4M
+Squire Patton Boggs US LLP $24.4M
+Mehlman Castagnetti Rosen & Thomas Inc. $22.6M
+Capitol Counsel LLC $21.9M
+Crossroads Strategies LLC $21.7M
+K&L Gates LLP $21.6M
+Cassidy & Associates Inc. $20.3M
+Thorn Run Partners LLC $18.9M
+Van Scoyoc Associates Inc. $18.4M
+Elmendorf Strategies LLC $18.1M
+Ballard Partners Inc. $17.8M
+Covington & Burling LLP $17.4M
+Alpine Group Inc. $14.8M
+Capitol Tax Partners LLP $14.2M
+Tarplin Downs & Young LLC $14.2M
+Williams & Jensen PLLC $13.7M
+Fierce Government Relations LLC $12.7M
+Ogilvy Government Relations $11.9M
+Harbinger Strategies LLC $10.9M
+Arnold & Porter Kaye Scholer LLP $10.8M
+DLA Piper LLP $10.7M
+Hogan Lovells US LLP $10.5M
+Monument Advocacy $10.3M
+Baker Donelson Bearman Caldwell & Berkowitz PC $10.2M
+ACG Advocacy LLC $10.1M
+Steptoe & Johnson LLP $9.8M
+S-3 Group LLC $9.8M
+Kountoupes Denham Carr & Reid LLC $9.5M
+FGH Holdings LLC $9.3M
+Venn Strategies LLC $8.9M
+Greenberg Traurig LLP $8.8M
+Duberstein Group Inc. $8.7M
+Alston & Bird LLP $8.4M
+Polaris Consulting LLC $8.4M
+Bracewell LLP $8.2M
+Avenue Solutions LLC $8.2M
+Strategic Marketing Innovations Inc. $8.2M
+Miller Strategies LLC $7.9M
+Venable LLP $7.9M
+Mercury Public Affairs LLC $7.5M
+Prime Policy Group LLC $7.5M
+Group DC LLC $7.5M
+Cypress Advocacy LLC $7.3M
+Hannegan Landau Poersch & Rosenbaum Advocacy LLC $7.2M
+Franklin Square Group LLC $7.2M
+Nickles Group LLC $7.1M
+Dentons US LLP $6.9M
+Russell Group Inc. $6.8M
+Roberti Global LLC $6.8M
+Cozen O’Connor Public Strategies $6.7M
+Vogel Group $6.7M
+King & Spalding LLP $6.6M
+Michael Best Strategies LLC $6.4M
+NVG LLC $6.4M
+Ferguson Group LLC $6.3M
+Hobart Hallaway & Quayle Ventures LLC $6.3M
+Rich Feuer Anderson $6.2M
+CGCN Group LLC $6.2M
+Ernst & Young LLP $6.2M
+JA Green & Co. $6.1M
+Lewis-Burke Associates LLC $6.0M
+Elevate Government Affairs LLC $6.0M
+Farragut Partners LLP $6.0M
+Clark Hill PLC $5.9M
+Porterfield Fettig & Sears LLC $5.9M
+Faegre Drinker Biddle & Reath LLP $5.9M
+Todd Strategy LLC $5.7M
+Roosevelt Group LLC $5.6M
+Nelson Mullins Riley & Scarborough LLP $5.6M
+Sidley Austin LLP $5.6M
+Polsinelli PC $5.6M
+Capitol Hill Consulting Group $5.6M
+Smith-Free Group Inc. $5.5M
+Washington Tax & Public Policy Group LLC $5.4M
+McAllister & Quinn LLC $5.2M
+Ervin Graves Strategy Group LLC $5.2M
+Innovative Federal Strategies LLC $5.1M
+Fulcrum Public Affairs LLC $5.1M
+Baker & Hostetler LLP $5.1M
+Carmen Group Inc. $5.1M
+American Defense International Inc. $5.0M
+Wilmer Cutler Pickering Hale and Dorr LLP $4.9M
+Public Strategies Washington Inc. $4.9M
+Foley & Lardner LLP $4.8M
+Winning Strategies Washington $4.8M
+Bockorny Group Inc. $4.8M
+ArentFox Schiff LLP $4.7M
+Federal Hall Policy Advisors LLC $4.7M
+Navigators Global LLC $4.7M
+FTI Government Affairs $4.7M
+Madison Group Inc. $4.5M
+Jeffrey J. Kimbell & Associates Inc. $4.5M
+Klein/Johnson Group LP $4.4M
+McDermott+Consulting LLC $4.4M
+McManus Group LLC $4.4M
+Cavarocchi Ruscio Dennis Associates LLC $4.2M
+Blank Rome Government Relations LLC $4.2M
+Stryk Global Diplomacy $4.2M
+Powers Pyles Sutter & Verville PC $4.1M
+W Strategies LLC $4.1M
+Signal Group $4.1M
+Husch Blackwell Strategies LLC $4.0M
+Putala Strategies LLC $4.0M
+Lincoln Policy Group LLC $4.0M
+West Front Strategies LLC $3.9M
+Becker & Poliakoff PA $3.9M
+O’Brien Gentry & Scott LLC $3.8M
+Boundary Stone Partners $3.8M
+Lot Sixteen LLC $3.7M
+Cormac Group LLP $3.7M
+Sternhell Group $3.6M
+McGuireWoods Consulting LLC $3.6M
+Federal Street Strategies LLC $3.6M
+Barnes & Thornburg LLP $3.5M
+Alcalde & Fay Ltd. $3.5M
+Ferox Strategies LLC $3.5M
+Marshall & Popp LLC $3.4M
+Empire Consulting Group $3.4M
+Pace LLP $3.4M
+Buchanan Ingersoll & Rooney PC $3.4M
+Townsend Public Affairs Inc. $3.4M
+Nathanson & Hauck $3.4M
+Owen Evans Ingols Inc. $3.4M
+Normandy Group LLC $3.4M
+Van Ness Feldman LLP $3.3M
+Adams and Reese LLP $3.2M
+Mayer Brown LLP $3.2M
+Ricchetti Inc. $3.2M
+Bose Public Affairs Group LLC $3.1M
+Penn Hill Group $3.1M
+Simmons & Russell Group LLC $3.1M
+Tributary LLP $3.0M
+Resolution Public Affairs LLC $3.0M
+Jim Massie & Partners LLC $3.0M
+Kadesh & Associates LLC $3.0M
+McLarty Inbound LLC $3.0M
+Hart Health Strategies Inc. $2.9M
+Merchant McIntyre & Associates LLC $2.9M
+Natural Resource Results LLC $2.9M
+Carpi & Clay Government Relations $2.8M
+ML Strategies LLC $2.8M
+Jones Walker LLP $2.8M
+Wiley Rein LLP $2.8M
+Miller & Chevalier Chartered $2.8M
+Kelley Drye & Warren LLP $2.8M
+Picard Group LLC $2.8M
+Cogent Strategies LLC $2.8M
+GrayRobinson PA $2.7M
+Majority Group LLC $2.7M
+Livingston Group LLC $2.7M
+Crowell & Moring LLP $2.7M
+Platinum Advisors DC $2.7M
+Raben Group LLC $2.7M
+Summit Strategies Government Affairs LLC $2.6M
+Michael Torrey Associates LLC $2.6M
+Strategic Health Care Co. $2.6M
+Alignment Government Strategies $2.6M
+Hance Scarborough LLP $2.6M
+GuidePost Strategies $2.6M
+Welsh Rose LLC $2.5M
+Liberty Partners Group LLC $2.5M
+Strategies 360 $2.5M
+Splitoak Strategies LLC $2.5M
+Washington 2 Advocates LLC $2.5M
+Tremont Strategies Group LLC $2.4M
+Dutko Worldwide LLC $2.4M
+McCarter & English LLP $2.4M
+Thompson Coburn LLP $2.4M
+TwinLogic Strategies LLP $2.4M
+East End Group LLC $2.4M
+PricewaterhouseCoopers LLP $2.4M
+Keller Partners & Co. $2.4M
+Daly Consulting Group LLC $2.3M
+CJ Lake LLC $2.3M
+Gephardt Group Government Affairs $2.3M
+Whitmer & Worrall LLC $2.3M
+A10 Associates $2.3M
+Petrizzo Group Inc. $2.3M
+Smith Dawson & Andrews Inc. $2.3M
+Spirit Rock Consulting Inc. $2.2M
+Republic Consulting LLC $2.2M
+Salt Point Strategies LLC $2.2M
+TeleMedia Policy Corp. $2.1M
+SBL Strategies LLC $2.1M
+Hooper Lundy & Bookman PC $2.1M
+Tiber Creek Health Strategies Inc. $2.1M
+Banner Public Affairs LLC $2.1M
+Capitol Resources LLC $2.1M
+Sirona Strategies LLC $2.1M
+Blue Ridge Law & Policy PC $2.1M
+Tiger Hill Partners LLC $2.1M
+Thorsen French Advocacy LLC $2.0M
+Capitol Hill Policy Group LLC $2.0M
+Maynard Cooper & Gale PC $2.0M
+KPM Group DC LLC $1.9M
+Clark Street Associates LLC $1.9M
+Waxman Strategies $1.9M
+Marcus G. Faust PC $1.9M
+Health Policy Source Inc. $1.9M
+Pillsbury Winthrop Shaw Pittman LLP $1.9M
+Atlantic Strategies Group LLC $1.9M
+Vitello Consulting $1.9M
+Kasowitz Benson Torres LLP $1.9M
+Chamber Hill Strategies LLC $1.9M
+Sims Strategies LLC $1.9M
+Federal Policy Group LLC $1.8M
+Davis & Harman LLP $1.8M
+Rock Creek Counsel LLC $1.8M
+GovBiz Advantage Inc. $1.8M
+Taft Stettinius & Hollister LLP $1.8M
+LNE Group LLC $1.8M
+Troutman Pepper Hamilton Sanders LLP $1.8M
+David Turch & Associates $1.8M
+Sorini Samet & Associates LLC $1.8M
+FS Vector LLC $1.8M
+Stewart Strategies & Solutions LLC $1.8M
+Raffaniello & Associates LLC $1.8M
+Chartwell Strategy Group LLC $1.7M
+O’Keeffe Shahmoradi Strategies LLC $1.7M
+Emergent Strategies LLC $1.7M
+Bridge Public Affairs $1.7M
+Downs Government Affairs LLC $1.7M
+Rising Tide Associates LLC $1.7M
+Rampy Northrup LLC $1.7M
+Bradley Arant Boult Cummings LLP $1.6M
+North South Government Strategies $1.6M
+CFM Strategic Communications Inc. $1.6M
+Plurus Strategies LLC $1.6M
+Stanton Park Group LLC $1.6M
+Team Hallahan LLC $1.6M
+535 Group LLC $1.6M
+Hunton Andrews Kurth LLP $1.6M
+McDermott Will & Emery LLP $1.6M
+Capitol Integration $1.6M
+Lobbyit.com LLC $1.5M
+Tai Ginsberg & Associates LLC $1.5M
+Tonio Burgos & Associates Inc. $1.5M
+Podesta.com $1.5M
+Atlas Crossing LLC $1.5M
+Munk Policy & Law PLLC $1.5M
+Pioneer Public Affairs $1.5M
+Capitol Hill Partners $1.5M
+Hall Render Killian Heath & Lyman PC $1.5M
+Porter Group LLC $1.5M
+Timothy R. Rupli & Associates Inc. $1.5M
+Capitol Legislative Strategies LLC $1.4M
+Keefe Singiser Partners LLC $1.4M
+Robertson Monagle & Eastaugh PC $1.4M
+JM Burkman & Associates LLC $1.4M
+Stonington Global LLC $1.4M
+Potomac Partners DC LLC $1.4M
+Milne Wiener & Shofe Global Strategies $1.4M
+Horizon Government Affairs LLC $1.4M
+DC Legislative & Regulatory Services Inc. $1.4M
+Kit Bond Strategies LLP $1.4M
+Rubicon Advisors LLC $1.4M
+Ballard Spahr LLP $1.4M
+OB-C Group LLC $1.4M
+Robert K. Weidner $1.4M
+American Capitol Group $1.4M
+1607 Strategies LLC $1.4M
+H&M Strategies LLP $1.4M
+Locke Lord LLP $1.3M
+Vectis DC LLC $1.3M
+G2G Consulting LLC $1.3M
+Freemyer & Associates PC $1.3M
+Duane Morris LLP $1.3M
+Hill East Group LLC $1.3M
+LSN Partners LLC $1.3M
+Wynne Health Group LLC $1.3M
+Commonwealth Strategic Partners LLC $1.3M
+Davidoff Hutcher & Citron LLP $1.3M
+Akerman LLP $1.3M
+Sustainable Strategies DC $1.3M
+McKeon Group Inc. $1.3M
+Groom Law Group Chartered $1.3M
+Corley Consulting LLC $1.3M
+O’Neill Athy & Casey PC $1.3M
+Tides Group LLC $1.3M
+Bluestone Strategies LLC $1.3M
+Federal Science Partners LLC $1.3M
+Combest Sell & Associates LLC $1.3M
+Missy Edwards Strategies LLC $1.3M
+Card & Associates LLC $1.2M
+Mercury Strategies LLC $1.2M
+Envision Strategy LLC $1.2M
+BC Consulting LLC $1.2M
+United by Interest LLC $1.2M
+VantageKnight Inc. $1.2M
+SmithBucklin Corp. $1.2M
+Kyle House Group LLC $1.2M
+Bryan Cave Leighton Paisner LLP $1.2M
+Burrell International Group LLC $1.2M
+Peter Damon Group LLC $1.2M
+Kilpatrick Townsend & Stockton LLP $1.2M
+National Group LLP $1.2M
+Cardinal Infrastructure LLC $1.2M
+Mapetsi Policy Group LLC $1.2M
+Prism Law Group PLLC $1.2M
+Emmer Consulting PC $1.2M
+Foley Hoag LLP $1.2M
+SC Partners LLC $1.2M
+38 North Solutions LLC $1.2M
+Wessel Group Inc. $1.2M
+Edgepoint LLC $1.2M
+Capitol City Group Ltd. $1.1M
+Water Strategies LLC $1.1M
+Allon Advocacy LLC $1.1M
+Urban Swirski & Associates LLC $1.1M
+SL Strategies LLC $1.1M
+Doerrer Group LLC $1.1M
+Mintz Levin Cohn Ferris Glovsky and Popeo PC $1.1M
+Gordon Thomas Honeywell LLP $1.1M
+Leavitt Partners LLC $1.1M
+Jarrard Phillips Cate & Hancock Inc. $1.1M
+Guide Consulting Services $1.1M
+A1.9 Strategies LLC $1.1M
+Robert A. Rapoza Associates Inc. $1.1M
+Marla Grossman $1.1M
+Meguire Whitney LLC $1.1M
+Debrunner & Associates Inc. $1.1M
+Siff & Associates PLLC $1.1M
+McCarthy Advanced Consulting LLC $1.1M
+State Federal Strategies $1.1M
+Gibson Group LLC $1.1M
+Nexxus Consulting LLC $1.1M
+Capitol Decisions Inc. $1.1M
+Twenty-First Century Group Inc. $1.1M
+Capitol Consulting Group LLC $1.1M
+Etherton & Associates Inc. $1.0M
+RR&G LLC $1.0M
+Advanced Policy Consulting LLC $1.0M
+ENS Resources Inc. $1.0M
+O’Neill & Associates LLC $1.0M
+Joseph Group LLC $1.0M
+Murray Montgomery & O’Donnell $1.0M
+Hobbs Group $1.0M
+Zirkelbach Strategies LLC $1.0M
+Stapleton & Associates LLC $1.0M
+Constantinople & Vallone Consulting LLC $1.0M
+JST Strategies LLC $1.0M
+Lester Health Law PLLC $1.0M
+Capstone National Partners $1.0M"
+
+# Splitting the text into lines
+lines <- strsplit(text, "\n")[[1]]
+
+# Removing the column headers
+df <- lines[-1]
+
+# Splitting each line into 'Lobbying Firm' and '2021 Revenue'
+split_data <- strsplit(df, "\\s+\\$")
+
+# Extracting 'Lobbying Firm' and '2021 Revenue'
+lobbying_firms <- sapply(split_data, function(x) paste(x[-length(x)], collapse = " "))
+revenues <- sapply(split_data, function(x) as.numeric(sub("M", "", x[length(x)])))
+
+# Creating a data frame
+df <- data.frame(Lobbying_Firm = lobbying_firms, Revenue_2021 = revenues)
+
+# Displaying the first few rows of the dataframe
+head(df)
+
+#create new vector for topfirm
+data$topfirm <- 0
+# Find the indices where the lobbying firm matches the registrant_name and update 'topfirm' to 1
+matching_indices <- match(tolower(df$Lobbying_Firm), tolower(data$registrant_name), nomatch = 0)
+data$topfirm[matching_indices] <- 1
+```
+
 
